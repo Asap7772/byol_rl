@@ -56,7 +56,7 @@ class Split(enum.Enum):
   @property
   def num_examples(self):
     return {
-        Split.TRAIN_AND_VALID: 13394,
+        Split.TRAIN_AND_VALID: 9469,
         Split.TRAIN: 9469,
         Split.VALID: 0,
         Split.TEST: 3925,

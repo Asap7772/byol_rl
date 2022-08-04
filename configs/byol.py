@@ -23,103 +23,110 @@ _WD_PRESETS = {40: 1e-6, 100: 1e-6, 300: 1e-6, 1000: 1.5e-6}
 _EMA_PRESETS = {40: 0.97, 100: 0.99, 300: 0.99, 1000: 0.996}
 
 
-def get_config(num_epochs: int, batch_size: int):
+def get_config(num_epochs: int, batch_size: int, **kwargs):
   """Return config object, containing all hyperparameters for training."""
   train_images_per_epoch = dataset.Split.TRAIN_AND_VALID.num_examples
 
   assert num_epochs in [40, 100, 300, 1000]
 
-#   config = dict(
-#       random_seed=0,
-#       num_classes=1000,
-#       batch_size=batch_size,
-#       max_steps=num_epochs * train_images_per_epoch // batch_size,
-#       enable_double_transpose=True,
-#       base_target_ema=_EMA_PRESETS[num_epochs],
-#       network_config=dict(
-#           projector_hidden_size=4096,
-#           projector_output_size=256,
-#           predictor_hidden_size=4096,
-#           encoder_class='ResNet50',  # Should match a class in utils/networks.
-#           encoder_config=dict(
-#               resnet_v2=False,
-#               width_multiplier=1),
-#           bn_config={
-#               'decay_rate': .9,
-#               'eps': 1e-5,
-#               # Accumulate batchnorm statistics across devices.
-#               # This should be equal to the `axis_name` argument passed
-#               # to jax.pmap.
-#               'cross_replica_axis': 'i',
-#               'create_scale': True,
-#               'create_offset': True,
-#           }),
-#       optimizer_config=dict(
-#           weight_decay=_WD_PRESETS[num_epochs],
-#           eta=1e-3,
-#           momentum=.9,
-#       ),
-#       lr_schedule_config=dict(
-#           base_learning_rate=_LR_PRESETS[num_epochs],
-#           warmup_steps=10 * train_images_per_epoch // batch_size,
-#       ),
-#       evaluation_config=dict(
-#           subset='test',
-#           batch_size=100,
-#       ),
-#       checkpointing_config=dict(
-#           use_checkpointing=True,
-#           checkpoint_dir='/tmp/byol',
-#           save_checkpoint_interval=300,
-#           filename='pretrain.pkl'
-#       ),
-#   )
-
-    # imagenette
+  if kwargs['use_imagenette']:
+    print('Using imagenette dataset')
     config = dict(
-      random_seed=0,
-      num_classes=10,
-      batch_size=batch_size,
-      max_steps=num_epochs * train_images_per_epoch // batch_size,
-      enable_double_transpose=True,
-      base_target_ema=_EMA_PRESETS[num_epochs],
-      network_config=dict(
-          projector_hidden_size=4096,
-          projector_output_size=256,
-          predictor_hidden_size=4096,
-          encoder_class='ResNet18',  # Should match a class in utils/networks.
-          encoder_config=dict(
-              resnet_v2=False,
-              width_multiplier=1),
-          bn_config={
-              'decay_rate': .9,
-              'eps': 1e-5,
-              # Accumulate batchnorm statistics across devices.
-              # This should be equal to the `axis_name` argument passed
-              # to jax.pmap.
-              'cross_replica_axis': 'i',
-              'create_scale': True,
-              'create_offset': True,
-          }),
-      optimizer_config=dict(
-          weight_decay=1e-6,
-          eta=1e-3,
-          momentum=.9,
-      ),
-      lr_schedule_config=dict(
-          base_learning_rate=2.0,
-          warmup_steps=10 * train_images_per_epoch // batch_size,
-      ),
-      evaluation_config=dict(
-          subset='test',
-          batch_size=25,
-      ),
-      checkpointing_config=dict(
-          use_checkpointing=True,
-          checkpoint_dir='/tmp/byol',
-          save_checkpoint_interval=300,
-          filename='pretrain.pkl'
-      ),
-  )
-
+        random_seed=0,
+        num_classes=10,
+        batch_size=batch_size,
+        max_steps=num_epochs * train_images_per_epoch // batch_size,
+        enable_double_transpose=True,
+        base_target_ema=_EMA_PRESETS[num_epochs],
+        network_config=dict(
+            projector_hidden_size=4096,
+            projector_output_size=256,
+            predictor_hidden_size=4096,
+            encoder_class='ResNet18',  # Should match a class in utils/networks.
+            encoder_config=dict(
+                resnet_v2=False,
+                width_multiplier=1),
+            bn_config={
+                'decay_rate': .9,
+                'eps': 1e-5,
+                # Accumulate batchnorm statistics across devices.
+                # This should be equal to the `axis_name` argument passed
+                # to jax.pmap.
+                'cross_replica_axis': 'i',
+                'create_scale': True,
+                'create_offset': True,
+            }),
+        optimizer_config=dict(
+            weight_decay=1e-6,
+            eta=1e-3,
+            momentum=.9,
+        ),
+        lr_schedule_config=dict(
+            base_learning_rate=2.0,
+            warmup_steps=10 * train_images_per_epoch // batch_size,
+        ),
+        evaluation_config=dict(
+            subset='test',
+            batch_size=25,
+        ),
+        checkpointing_config=dict(
+            use_checkpointing=True,
+            checkpoint_dir='/tmp/byol',
+            save_checkpoint_interval=300,
+            filename='pretrain.pkl'
+        ),
+    )
+  else:
+    print('Using imagenette dataset')
+    config = dict(
+        random_seed=0,
+        num_classes=1000,
+        batch_size=batch_size,
+        max_steps=num_epochs * train_images_per_epoch // batch_size,
+        enable_double_transpose=True,
+        base_target_ema=_EMA_PRESETS[num_epochs],
+        network_config=dict(
+            projector_hidden_size=4096,
+            projector_output_size=256,
+            predictor_hidden_size=4096,
+            encoder_class='ResNet50',  # Should match a class in utils/networks.
+            encoder_config=dict(
+                resnet_v2=False,
+                width_multiplier=1),
+            bn_config={
+                'decay_rate': .9,
+                'eps': 1e-5,
+                # Accumulate batchnorm statistics across devices.
+                # This should be equal to the `axis_name` argument passed
+                # to jax.pmap.
+                'cross_replica_axis': 'i',
+                'create_scale': True,
+                'create_offset': True,
+            }),
+        optimizer_config=dict(
+            weight_decay=_WD_PRESETS[num_epochs],
+            eta=1e-3,
+            momentum=.9,
+        ),
+        lr_schedule_config=dict(
+            base_learning_rate=_LR_PRESETS[num_epochs],
+            warmup_steps=10 * train_images_per_epoch // batch_size,
+        ),
+        evaluation_config=dict(
+            subset='test',
+            batch_size=100,
+        ),
+        checkpointing_config=dict(
+            use_checkpointing=True,
+            checkpoint_dir='/tmp/byol',
+            save_checkpoint_interval=300,
+            filename='pretrain.pkl'
+        ),
+    )
+  
+  
+  print('Using rl_update: {}'.format(kwargs['rl_update']))
+  print('Additional Hyperparameters: {}'.format(kwargs))
+  config.update(kwargs)
+    
   return config

@@ -28,6 +28,7 @@ from byol import byol_experiment
 from byol import eval_experiment
 from byol.configs import byol as byol_config
 from byol.configs import eval as eval_config
+import wandb
 
 flags.DEFINE_string('experiment_mode',
                     'pretrain', 'The experiment, pretrain or linear-eval')
@@ -37,8 +38,11 @@ flags.DEFINE_integer('pretrain_epochs', 1000, 'Number of pre-training epochs')
 flags.DEFINE_integer('batch_size', 4096, 'Total batch size')
 flags.DEFINE_string('checkpoint_root', '/tmp/byol',
                     'The directory to save checkpoints to.')
-flags.DEFINE_integer('log_tensors_interval', 60, 'Log tensors every n seconds.')
-
+flags.DEFINE_integer('log_tensors_interval', 100, 'Log tensors every n steps.')
+flags.DEFINE_string('run_name', 'test', 'Name of the run.')
+flags.DEFINE_integer('use_imagenette', 1, 'To use Imagenette dataset')
+flags.DEFINE_integer('rl_update', 0, 'Use RL Update')
+flags.DEFINE_integer('num_samples', 20, 'Number of Samples')
 FLAGS = flags.FLAGS
 
 
@@ -57,6 +61,9 @@ def train_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
     or eval_experiment).
     config: the experiment config.
   """
+  wandb.init(project='byol', config=config, reinit=True, settings=wandb.Settings(start_method="thread"))
+  wandb.run.name = FLAGS.run_name
+
   experiment = experiment_class(**config)
   rng = jax.random.PRNGKey(0)
   step = 0
@@ -71,6 +78,9 @@ def train_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
       step, rng = checkpoint_data
 
   local_device_count = jax.local_device_count()
+
+  print('Starting training loop.', step, config['max_steps'])
+  
   while step < config['max_steps']:
     step_rng, rng = tuple(jax.random.split(rng))
     # Broadcast the random seeds across the devices
@@ -86,14 +96,20 @@ def train_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
     if config['checkpointing_config']['use_checkpointing']:
       experiment.save_checkpoint(step, rng)
       current_time = time.time()
-      if current_time - last_logging > FLAGS.log_tensors_interval:
+      
+      if step % FLAGS.log_tensors_interval == 0:
+        wandb.log({k:v.item() for k,v in scalars.items()}, step=step)
         logging.info('Step %d: %s', step, scalars)
         last_logging = current_time
     step += 1
-  logging.info('Saving final checkpoint')
-  logging.info('Step %d: %s', step, scalars)
-  experiment.save_checkpoint(step, rng)
 
+  try:
+    logging.info('Saving final checkpoint')
+    logging.info('Step %d: %s', step, scalars)
+    experiment.save_checkpoint(step, rng)
+    wandb.log({k:v.item() for k,v in scalars.items()}, step=step)
+  except Exception as e:
+    pass
 
 def eval_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
   """The main evaluation loop.
@@ -138,7 +154,10 @@ def main(_):
 
   if FLAGS.experiment_mode == 'pretrain':
     experiment_class = byol_experiment.ByolExperiment
-    config = byol_config.get_config(FLAGS.pretrain_epochs, FLAGS.batch_size)
+    config = byol_config.get_config(FLAGS.pretrain_epochs, FLAGS.batch_size, 
+                                    use_imagenette=FLAGS.use_imagenette, 
+                                    rl_update=FLAGS.rl_update,
+                                    num_samples=FLAGS.num_samples)
   elif FLAGS.experiment_mode == 'linear-eval':
     experiment_class = eval_experiment.EvalExperiment
     config = eval_config.get_config(f'{FLAGS.checkpoint_root}/pretrain.pkl',

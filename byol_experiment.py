@@ -66,7 +66,11 @@ class ByolExperiment:
       optimizer_config: Mapping[Text, Any],
       lr_schedule_config: Mapping[Text, Any],
       evaluation_config: Mapping[Text, Any],
-      checkpointing_config: Mapping[Text, Any]):
+      checkpointing_config: Mapping[Text, Any],
+      rl_update=0,
+      num_samples=20,
+      **kwargs
+      ):
     """Constructs the experiment.
 
     Args:
@@ -85,7 +89,8 @@ class ByolExperiment:
       evaluation_config: the evaluation configuration.
       checkpointing_config: the configuration for checkpointing.
     """
-
+    print('UNDER CONSTRUCTION', kwargs)
+    
     self._random_seed = random_seed
     self._enable_double_transpose = enable_double_transpose
     self._num_classes = num_classes
@@ -95,6 +100,9 @@ class ByolExperiment:
     self._base_target_ema = base_target_ema
     self._optimizer_config = optimizer_config
     self._evaluation_config = evaluation_config
+    
+    self.rl_update = rl_update
+    self.num_samples = num_samples
 
     # Checkpointed experiment state.
     self._byol_state = None
@@ -144,6 +152,7 @@ class ByolExperiment:
       All outputs of the model, i.e. a dictionary with projection, prediction
       and logits keys, for either the two views, or the image.
     """
+    
     encoder = getattr(networks, encoder_class)
     net = encoder(
         num_classes=None,  # Don't build the final linear layer
@@ -240,6 +249,7 @@ class ByolExperiment:
     # The stop_gradient is not necessary as we explicitly take the gradient with
     # respect to online parameters only in `optax.apply_updates`. We leave it to
     # indicate that gradients are not backpropagated through the target network.
+    
     repr_loss = helpers.regression_loss(
         online_network_out['prediction_view1'],
         jax.lax.stop_gradient(target_network_out['projection_view2']))
