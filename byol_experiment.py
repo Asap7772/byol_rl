@@ -258,22 +258,47 @@ class ByolExperiment:
     # indicate that gradients are not backpropagated through the target network.
     
     if self.rl_update:
-      forward_losses = []
-      backward_losses = []
+      forward_values = []
+      backward_values = []
       for i in range(self.num_samples):
-        forward_losses.append(helpers.regression_loss(
-          online_network_out['prediction'],
-          jax.lax.stop_gradient(target_network_out['projection_view' + str(i)])))
-        
-        backward_losses.append(helpers.regression_loss(
-          online_network_out['prediction_view'+ str(i)],
-          jax.lax.stop_gradient(target_network_out['projection'])))
+        forward_values.append(target_network_out['projection_view' + str(i)])
+        backward_values.append(online_network_out['projection_view' + str(i)])
+
+      forward_val = jnp.max(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
+      backward_val = jnp.max(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
       
-      cat_forward_losses = jnp.stack(forward_losses) # shape (num_samples, batch_size)
-      cat_backward_losses = jnp.stack(backward_losses) # shape (num_samples, batch_size)
+      network_val = online_network_out['prediction']
+      target_network_val = target_network_out['prediction']
       
-      repr_loss = jnp.max(cat_forward_losses, axis=0) + jnp.max(cat_backward_losses, axis=0)
+      td_forward = (network_val - jax.lax.stop_gradient(forward_val))**2
+      td_backward = (backward_val - jax.lax.stop_gradient(target_network_val))**2
       
+      repr_loss = td_forward + td_backward
+      
+      additional_logs = dict(
+          td_forward=jnp.mean(td_forward),
+          td_backward=jnp.mean(td_backward),
+          
+          val_mean=jnp.mean(network_val),
+          val_std=jnp.std(network_val),
+          val_max=jnp.max(network_val),
+          val_min=jnp.min(network_val),
+          
+          target_val_mean=jnp.mean(target_network_val),
+          target_val_std=jnp.std(target_network_val),
+          target_val_max=jnp.max(target_network_val),
+          target_val_min=jnp.min(target_network_val),
+          
+          forward_aug_mean=jnp.mean(forward_val),
+          forward_aug_std=jnp.std(forward_val),
+          forward_aug_max=jnp.max(forward_val),
+          forward_aug_min=jnp.min(forward_val),
+          
+          backward_aug_mean=jnp.mean(backward_val),
+          backward_aug_std=jnp.std(backward_val),
+          backward_aug_max=jnp.max(backward_val),
+          backward_aug_min=jnp.min(backward_val),
+      )
     else:
       repr_loss = helpers.regression_loss(
           online_network_out['prediction_view1'],
@@ -281,7 +306,8 @@ class ByolExperiment:
       repr_loss = repr_loss + helpers.regression_loss(
           online_network_out['prediction_view2'],
           jax.lax.stop_gradient(target_network_out['projection_view1']))
-
+      
+      additional_logs = {}
     repr_loss = jnp.mean(repr_loss)
 
     # Classification loss (with gradient flows stopped from flowing into the
@@ -315,6 +341,7 @@ class ByolExperiment:
         classif_loss=classif_loss,
         top1_accuracy=top1_acc,
         top5_accuracy=top5_acc,
+        **additional_logs
     )
 
     return loss, (dict(online_state=online_state,
