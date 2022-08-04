@@ -269,8 +269,8 @@ class ByolExperiment:
           online_network_out['prediction_view'+ str(i)],
           jax.lax.stop_gradient(target_network_out['projection'])))
       
-      cat_forward_losses = jnp.concatenate(forward_losses) # shape (num_samples, batch_size)
-      cat_backward_losses = jnp.concatenate(backward_losses) # shape (num_samples, batch_size)
+      cat_forward_losses = jnp.stack(forward_losses) # shape (num_samples, batch_size)
+      cat_backward_losses = jnp.stack(backward_losses) # shape (num_samples, batch_size)
       
       repr_loss = jnp.max(cat_forward_losses, axis=0) + jnp.max(cat_backward_losses, axis=0)
       
