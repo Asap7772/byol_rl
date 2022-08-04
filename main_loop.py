@@ -30,6 +30,8 @@ from byol.configs import byol as byol_config
 from byol.configs import eval as eval_config
 import wandb
 
+import tqdm
+
 flags.DEFINE_string('experiment_mode',
                     'pretrain', 'The experiment, pretrain or linear-eval')
 flags.DEFINE_string('worker_mode', 'train', 'The mode, train or eval')
@@ -39,6 +41,7 @@ flags.DEFINE_integer('batch_size', 4096, 'Total batch size')
 flags.DEFINE_string('checkpoint_root', '/tmp/byol',
                     'The directory to save checkpoints to.')
 flags.DEFINE_integer('log_tensors_interval', 100, 'Log tensors every n steps.')
+flags.DEFINE_string('wandb_project', 'byol', 'The wandb project to use.')
 flags.DEFINE_string('run_name', 'test', 'Name of the run.')
 flags.DEFINE_integer('use_imagenette', 1, 'To use Imagenette dataset')
 flags.DEFINE_integer('rl_update', 0, 'Use RL Update')
@@ -61,7 +64,7 @@ def train_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
     or eval_experiment).
     config: the experiment config.
   """
-  wandb.init(project='byol', config=config, reinit=True, settings=wandb.Settings(start_method="thread"))
+  wandb.init(project=FLAGS.wandb_project if FLAGS.run_name != 'test' else 'test', config=config, reinit=True, settings=wandb.Settings(start_method="thread"))
   wandb.run.name = FLAGS.run_name
 
   experiment = experiment_class(**config)
@@ -69,7 +72,6 @@ def train_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
   step = 0
 
   host_id = jax.host_id()
-  last_logging = time.time()
   if config['checkpointing_config']['use_checkpointing']:
     checkpoint_data = experiment.load_checkpoint()
     if checkpoint_data is None:
@@ -81,7 +83,7 @@ def train_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
 
   print('Starting training loop.', step, config['max_steps'])
   
-  while step < config['max_steps']:
+  for step in tqdm.tqdm(range(step, config['max_steps']), desc='Step'):
     step_rng, rng = tuple(jax.random.split(rng))
     # Broadcast the random seeds across the devices
     step_rng_device = jax.random.split(step_rng, num=jax.device_count())
@@ -101,7 +103,6 @@ def train_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
         wandb.log({k:v.item() for k,v in scalars.items()}, step=step)
         logging.info('Step %d: %s', step, scalars)
         last_logging = current_time
-    step += 1
 
   try:
     logging.info('Saving final checkpoint')

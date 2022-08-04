@@ -66,7 +66,7 @@ augment_config = dict(
     ))
 
 
-def postprocess(inputs: JaxBatch, rng: jnp.ndarray):
+def postprocess(inputs: JaxBatch, rng: jnp.ndarray, rl_update: bool = False, num_samples=20):
   """Apply the image augmentations to crops in inputs (view1 and view2)."""
 
   def _postprocess_image(
@@ -97,12 +97,19 @@ def postprocess(inputs: JaxBatch, rng: jnp.ndarray):
       out = solarize(out, solarize_rng, **presets['solarize'])
     out = jnp.clip(out, 0., 1.)
     return jax.lax.stop_gradient(out)
-
-  rng1, rng2 = jax.random.split(rng, num=2)
-  view1 = _postprocess_image(inputs['view1'], rng1, augment_config['view1'])
-  view2 = _postprocess_image(inputs['view2'], rng2, augment_config['view2'])
-  return dict(view1=view1, view2=view2, labels=inputs['labels'])
-
+  
+  if not rl_update:
+    rng1, rng2 = jax.random.split(rng, num=2)
+    view1 = _postprocess_image(inputs['view1'], rng1, augment_config['view1'])
+    view2 = _postprocess_image(inputs['view2'], rng2, augment_config['view2'])
+    return dict(view1=view1, view2=view2, labels=inputs['labels'])
+  else:
+    rngs = jax.random.split(rng, num=num_samples)
+    new_views = {'view'+str(i) : _postprocess_image(inputs['view'+str(i)], rngs[i], \
+      augment_config['view1'] if i % 2 else augment_config['view2']) for i in range(num_samples)}
+    extra_dict = {'images': inputs['images']} if 'images' in inputs else {}
+    return dict(**extra_dict, **new_views, labels=inputs['labels'])
+    
 
 def _maybe_apply(apply_fn, inputs, rng, apply_prob):
   should_apply = jax.random.uniform(rng, shape=()) <= apply_prob

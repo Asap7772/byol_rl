@@ -68,6 +68,7 @@ class PreprocessMode(enum.Enum):
   PRETRAIN = 1  # Generates two augmented views (random crop + augmentations).
   LINEAR_TRAIN = 2  # Generates a single random crop.
   EVAL = 3  # Generates a single center crop.
+  NO_CROP = 4  # No crop
 
 
 def normalize_images(images: jnp.ndarray) -> jnp.ndarray:
@@ -84,7 +85,9 @@ def load(split: Split,
          preprocess_mode: PreprocessMode,
          batch_dims: Sequence[int],
          transpose: bool = False,
-         allow_caching: bool = False) -> Generator[Batch, None, None]:
+         allow_caching: bool = False,
+         rl_pretrain:bool=False,
+         num_samples=20) -> Generator[Batch, None, None]:
   """Loads the given split of the dataset."""
   start, end = _shard(split, jax.host_id(), jax.host_count())
 
@@ -121,10 +124,15 @@ def load(split: Split,
   ds = ds.with_options(options)
 
   def preprocess_pretrain(example):
-    view1 = _preprocess_image(example['image'], mode=preprocess_mode)
-    view2 = _preprocess_image(example['image'], mode=preprocess_mode)
-    label = tf.cast(example['label'], tf.int32)
-    return {'view1': view1, 'view2': view2, 'labels': label}
+    if rl_pretrain:
+      views= {'view'+str(i):_preprocess_image(example['image'], mode=preprocess_mode) for i in range(num_samples)}
+      label = tf.cast(example['label'], tf.int32)
+      return {'images': _preprocess_image(example['image'], mode=PreprocessMode.NO_CROP), 'labels': label, **views}
+    else:
+      view1 = _preprocess_image(example['image'], mode=preprocess_mode)
+      view2 = _preprocess_image(example['image'], mode=preprocess_mode)
+      label = tf.cast(example['label'], tf.int32)
+      return {'view1': view1, 'view2': view2, 'labels': label}
 
   def preprocess_linear_train(example):
     image = _preprocess_image(example['image'], mode=preprocess_mode)
@@ -147,15 +155,18 @@ def load(split: Split,
     ds = ds.map(
         preprocess_eval, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  def transpose_fn(batch):
+  def transpose_fn(batch, num_samples=20):
     # We use the double-transpose-trick to improve performance for TPUs. Note
     # that this (typically) requires a matching HWCN->NHWC transpose in your
     # model code. The compiler cannot make this optimization for us since our
     # data pipeline and model are compiled separately.
     batch = dict(**batch)
     if preprocess_mode is PreprocessMode.PRETRAIN:
-      batch['view1'] = tf.transpose(batch['view1'], (1, 2, 3, 0))
-      batch['view2'] = tf.transpose(batch['view2'], (1, 2, 3, 0))
+      for i in range(num_samples):
+        if 'view'+str(i) in batch:
+          batch['view'+str(i)] = tf.transpose(batch['view'+str(i)], (1, 2, 3, 0))
+      if 'images' in batch:
+        batch['images'] = tf.transpose(batch['images'], (1, 2, 3, 0))
     else:
       batch['images'] = tf.transpose(batch['images'], (1, 2, 3, 0))
     return batch
@@ -207,8 +218,11 @@ def _preprocess_image(
   elif mode is PreprocessMode.LINEAR_TRAIN:
     image = _decode_and_random_crop(image_bytes)
     image = tf.image.random_flip_left_right(image)
+  elif mode is PreprocessMode.NO_CROP:
+    image = tf.io.decode_jpeg(image_bytes, channels=3) # get image without cropping
   else:
     image = _decode_and_center_crop(image_bytes)
+    
   # NOTE: Bicubic resize (1) casts uint8 to float32 and (2) resizes without
   # clamping overshoots. This means values returned will be outside the range
   # [0.0, 255.0] (e.g. we have observed outputs in the range [-51.1, 336.6]).
@@ -250,14 +264,21 @@ def _decode_and_random_crop(image_bytes: tf.Tensor) -> tf.Tensor:
   return image
 
 
-def transpose_images(batch: Batch):
+def transpose_images(batch: Batch, num_samples: int=20) -> Batch:
   """Transpose images for TPU training.."""
+  
   new_batch = dict(batch)  # Avoid mutating in place.
+  for i in range(num_samples):
+    if 'view'+str(i) in batch:
+      new_batch['view'+str(i)] = jnp.transpose(batch['view'+str(i)], (3, 0, 1, 2))
   if 'images' in batch:
     new_batch['images'] = jnp.transpose(batch['images'], (3, 0, 1, 2))
-  else:
-    new_batch['view1'] = jnp.transpose(batch['view1'], (3, 0, 1, 2))
-    new_batch['view2'] = jnp.transpose(batch['view2'], (3, 0, 1, 2))
+  
+  # if 'images' in batch:
+  #   new_batch['images'] = jnp.transpose(batch['images'], (3, 0, 1, 2))
+  # else:
+  #   new_batch['view1'] = jnp.transpose(batch['view1'], (3, 0, 1, 2))
+  #   new_batch['view2'] = jnp.transpose(batch['view2'], (3, 0, 1, 2))
   return new_batch
 
 

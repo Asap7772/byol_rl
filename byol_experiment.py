@@ -19,6 +19,7 @@ Use this experiment to pre-train a self-supervised representation.
 """
 
 import functools
+from turtle import backward
 from typing import Any, Generator, Mapping, NamedTuple, Text, Tuple, Union
 
 from absl import logging
@@ -152,7 +153,6 @@ class ByolExperiment:
       All outputs of the model, i.e. a dictionary with projection, prediction
       and logits keys, for either the two views, or the image.
     """
-    
     encoder = getattr(networks, encoder_class)
     net = encoder(
         num_classes=None,  # Don't build the final linear layer
@@ -189,9 +189,16 @@ class ByolExperiment:
       return outputs
 
     if is_training:
-      outputs_view1 = apply_once_fn(inputs['view1'], '_view1')
-      outputs_view2 = apply_once_fn(inputs['view2'], '_view2')
-      return {**outputs_view1, **outputs_view2}
+      if self.rl_update:
+        output_dict = apply_once_fn(inputs['images'], '')  
+        for i in range(self.num_samples):
+            output_view_i = apply_once_fn(inputs['view'+ str(i)], '_view' + str(i))
+            output_dict.update(output_view_i)
+        return output_dict
+      else:
+        outputs_view1 = apply_once_fn(inputs['view1'], '_view1')
+        outputs_view2 = apply_once_fn(inputs['view2'], '_view2')
+        return {**outputs_view1, **outputs_view2}
     else:
       return apply_once_fn(inputs['images'], '')
 
@@ -230,7 +237,7 @@ class ByolExperiment:
     """
     if self._should_transpose_images():
       inputs = dataset.transpose_images(inputs)
-    inputs = augmentations.postprocess(inputs, rng)
+    inputs = augmentations.postprocess(inputs, rng, rl_update=self.rl_update, num_samples=self.num_samples)
     labels = inputs['labels']
 
     online_network_out, online_state = self.forward.apply(
@@ -250,12 +257,30 @@ class ByolExperiment:
     # respect to online parameters only in `optax.apply_updates`. We leave it to
     # indicate that gradients are not backpropagated through the target network.
     
-    repr_loss = helpers.regression_loss(
-        online_network_out['prediction_view1'],
-        jax.lax.stop_gradient(target_network_out['projection_view2']))
-    repr_loss = repr_loss + helpers.regression_loss(
-        online_network_out['prediction_view2'],
-        jax.lax.stop_gradient(target_network_out['projection_view1']))
+    if self.rl_update:
+      forward_losses = []
+      backward_losses = []
+      for i in range(self.num_samples):
+        forward_losses.append(helpers.regression_loss(
+          online_network_out['prediction'],
+          jax.lax.stop_gradient(target_network_out['projection_view' + str(i)])))
+        
+        backward_losses.append(helpers.regression_loss(
+          online_network_out['prediction_view'+ str(i)],
+          jax.lax.stop_gradient(target_network_out['projection'])))
+      
+      cat_forward_losses = jnp.concatenate(forward_losses) # shape (num_samples, batch_size)
+      cat_backward_losses = jnp.concatenate(backward_losses) # shape (num_samples, batch_size)
+      
+      repr_loss = jnp.max(cat_forward_losses, axis=0) + jnp.max(cat_backward_losses, axis=0)
+      
+    else:
+      repr_loss = helpers.regression_loss(
+          online_network_out['prediction_view1'],
+          jax.lax.stop_gradient(target_network_out['projection_view2']))
+      repr_loss = repr_loss + helpers.regression_loss(
+          online_network_out['prediction_view2'],
+          jax.lax.stop_gradient(target_network_out['projection_view1']))
 
     repr_loss = jnp.mean(repr_loss)
 
@@ -469,7 +494,9 @@ class ByolExperiment:
         dataset.Split.TRAIN_AND_VALID,
         preprocess_mode=dataset.PreprocessMode.PRETRAIN,
         transpose=self._should_transpose_images(),
-        batch_dims=[jax.local_device_count(), per_device_batch_size])
+        batch_dims=[jax.local_device_count(), per_device_batch_size],
+        rl_pretrain=self.rl_update,
+        num_samples=self.num_samples)
 
   def _eval_batch(
       self,
