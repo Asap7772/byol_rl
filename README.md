@@ -20,9 +20,12 @@ To set up a Python virtual environment with the required dependencies, run:
 
 ```shell
 python3 -m venv byol_env
-source byol_env/bin/activate
+source byol_rl/byol_env/bin/activate
 pip install --upgrade pip
 pip install -r byol/requirements.txt
+pip install dm-acme[jax,tensorflow]
+pip install dm-acme[envs]
+pip install "jax[tpu]>=0.2.16" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 ```
 
 The code uses `tensorflow_datasets` to load the Imagenet dataset. Manual
