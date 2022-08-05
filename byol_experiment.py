@@ -70,6 +70,7 @@ class ByolExperiment:
       checkpointing_config: Mapping[Text, Any],
       rl_update=0,
       num_samples=20,
+      update_type=0,
       **kwargs
       ):
     """Constructs the experiment.
@@ -103,6 +104,7 @@ class ByolExperiment:
     self._evaluation_config = evaluation_config
     
     self.rl_update = rl_update
+    self.update_type = update_type
     self.num_samples = num_samples
 
     # Checkpointed experiment state.
@@ -258,24 +260,27 @@ class ByolExperiment:
     # indicate that gradients are not backpropagated through the target network.
     
     if self.rl_update:
-      forward_values = []
-      backward_values = []
-      for i in range(self.num_samples):
-        forward_values.append(target_network_out['projection_view' + str(i)])
-        backward_values.append(online_network_out['projection_view' + str(i)])
+      if self.update_type in [0, 1]:
+        forward_values = []
+        backward_values = []
+        for i in range(self.num_samples):
+          forward_values.append(target_network_out['projection_view' + str(i)])
+          backward_values.append(online_network_out['projection_view' + str(i)])
 
-      forward_val = jnp.max(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
-      backward_val = jnp.max(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
-      
-      network_val = online_network_out['prediction']
-      target_network_val = target_network_out['prediction']
-      
-      td_forward = (network_val - jax.lax.stop_gradient(forward_val))**2
-      td_backward = (backward_val - jax.lax.stop_gradient(target_network_val))**2
-      
-      repr_loss = td_forward + td_backward
-      
-      additional_logs = dict(
+        forward_val = jnp.max(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
+        backward_val = jnp.max(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
+        
+        network_val = online_network_out['prediction']
+        target_network_val = target_network_out['prediction']
+
+        if self.update_type == 0:
+          td_forward = (network_val - jax.lax.stop_gradient(forward_val))**2
+          td_backward = (backward_val - jax.lax.stop_gradient(target_network_val))**2
+        else:
+          td_forward = helpers.regression_loss(network_val, jax.lax.stop_gradient(forward_val))
+          td_backward = helpers.regression_loss(backward_val, jax.lax.stop_gradient(target_network_val))
+        
+        additional_logs = dict(
           td_forward=jnp.mean(td_forward),
           td_backward=jnp.mean(td_backward),
           
@@ -298,7 +303,55 @@ class ByolExperiment:
           backward_aug_std=jnp.std(backward_val),
           backward_aug_max=jnp.max(backward_val),
           backward_aug_min=jnp.min(backward_val),
-      )
+        )
+      
+        additional_logs = {'verbose/' + k: v for k, v in additional_logs.items()}
+        
+        repr_loss = td_forward + td_backward
+        
+      elif self.update_type in [2, 3]:
+        which_target_view = jax.lax.argmax(jnp.stack([target_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)
+        which_online_view = jax.lax.argmax(jnp.stack([online_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)
+        
+        network_val = online_network_out['prediction']
+        target_network_val = target_network_out['prediction']
+        
+        if self.update_type == 2:
+          td_forward = (network_val - jax.lax.stop_gradient(target_network_out['projection_view' + str(which_target_view)]))**2
+          td_backward = (online_network_out['projection_view' + str(which_online_view)] - jax.lax.stop_gradient(target_network_val))**2
+        else:
+          td_forward = helpers.regression_loss(network_val, jax.lax.stop_gradient(target_network_out['projection_view' + str(which_target_view)]))
+          td_backward = helpers.regression_loss(online_network_out['projection_view' + str(which_online_view)], jax.lax.stop_gradient(target_network_val))
+        
+        
+        additional_logs = dict(
+          td_forward=jnp.mean(td_forward),
+          td_backward=jnp.mean(td_backward),
+          
+          val_mean=jnp.mean(network_val),
+          val_std=jnp.std(network_val),
+          val_max=jnp.max(network_val),
+          val_min=jnp.min(network_val),
+          
+          target_val_mean=jnp.mean(target_network_val),
+          target_val_std=jnp.std(target_network_val),
+          target_val_max=jnp.max(target_network_val),
+          target_val_min=jnp.min(target_network_val),
+          
+          forward_aug_mean=jnp.mean(forward_val),
+          forward_aug_std=jnp.std(forward_val),
+          forward_aug_max=jnp.max(forward_val),
+          forward_aug_min=jnp.min(forward_val),
+          
+          backward_aug_mean=jnp.mean(backward_val),
+          backward_aug_std=jnp.std(backward_val),
+          backward_aug_max=jnp.max(backward_val),
+          backward_aug_min=jnp.min(backward_val),
+        )
+      
+        additional_logs = {'verbose/' + k: v for k, v in additional_logs.items()}
+        
+        repr_loss = td_forward + td_backward
     else:
       repr_loss = helpers.regression_loss(
           online_network_out['prediction_view1'],

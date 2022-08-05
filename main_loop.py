@@ -46,6 +46,7 @@ flags.DEFINE_string('run_name', 'test', 'Name of the run.')
 flags.DEFINE_integer('use_imagenette', 1, 'To use Imagenette dataset')
 flags.DEFINE_integer('rl_update', 0, 'Use RL Update')
 flags.DEFINE_integer('num_samples', 20, 'Number of Samples')
+flags.DEFINE_integer('update_type', 0, 'Use RL Update')
 FLAGS = flags.FLAGS
 
 
@@ -64,7 +65,12 @@ def train_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
     or eval_experiment).
     config: the experiment config.
   """
-  wandb.init(project=FLAGS.wandb_project if FLAGS.run_name != 'test' else 'test', config=config, reinit=True, settings=wandb.Settings(start_method="thread"))
+  wandb.init(
+    project=FLAGS.wandb_project if FLAGS.run_name != 'test' else 'test', 
+    config=config, 
+    reinit=True, 
+    settings=wandb.Settings(start_method="thread")
+  )
   wandb.run.name = FLAGS.run_name
 
   experiment = experiment_class(**config)
@@ -158,7 +164,8 @@ def main(_):
     config = byol_config.get_config(FLAGS.pretrain_epochs, FLAGS.batch_size, 
                                     use_imagenette=FLAGS.use_imagenette, 
                                     rl_update=FLAGS.rl_update,
-                                    num_samples=FLAGS.num_samples)
+                                    num_samples=FLAGS.num_samples,
+                                    update_type=FLAGS.update_type)
   elif FLAGS.experiment_mode == 'linear-eval':
     experiment_class = eval_experiment.EvalExperiment
     config = eval_config.get_config(f'{FLAGS.checkpoint_root}/pretrain.pkl',
