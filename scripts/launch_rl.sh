@@ -1,5 +1,5 @@
 index=$1
-dry_run=true
+dry_run=false
 debug=false
 
 echo "Launching $index"
