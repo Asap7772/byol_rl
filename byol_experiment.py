@@ -269,7 +269,7 @@ class ByolExperiment:
     # indicate that gradients are not backpropagated through the target network.
     
     if self.rl_update:
-      if self.update_type in [0, 1]:
+      if self.update_type in [0, 1, 5]:
         forward_values = []
         backward_values = []
         for i in range(self.num_samples):
@@ -316,7 +316,10 @@ class ByolExperiment:
       
         additional_logs = {'verbose/' + k: v for k, v in additional_logs.items()}
         
-        repr_loss = td_forward + td_backward
+        if self.update_type == 5:
+          repr_loss = 2 * td_backward # keep the same order of magnitude as the original loss
+        else:
+          repr_loss = td_forward + td_backward
         
       elif self.update_type in [2, 3]:
         which_target_view = jnp.argmax(jnp.stack([target_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)

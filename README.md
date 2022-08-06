@@ -19,6 +19,7 @@ the representation learnt by BYOL (using a given checkpoint).
 To set up a Python virtual environment with the required dependencies, run:
 
 ```shell
+sudo apt install python3.8-venv
 python3 -m venv byol_env
 source byol_env/bin/activate
 pip install --upgrade pip

@@ -1,5 +1,5 @@
 index=$1
-dry_run=false
+dry_run=true
 debug=false
 
 echo "Launching $index"
@@ -27,7 +27,7 @@ rl_update=1
 num_samples=20
 
 # dynamic hyperparameters
-update_types=(0 1 2 3)
+update_types=(5)
 
 for update_type in ${update_types[@]}; do
     if [ $index -eq '0' ]; then
