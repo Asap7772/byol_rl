@@ -71,6 +71,9 @@ class ByolExperiment:
       rl_update=0,
       num_samples=20,
       update_type=0,
+      use_both_prediction=0,
+      n_head_prediction=0,
+      num_heads=1024,
       **kwargs
       ):
     """Constructs the experiment.
@@ -106,6 +109,10 @@ class ByolExperiment:
     self.rl_update = rl_update
     self.update_type = update_type
     self.num_samples = num_samples
+    
+    self.use_both_prediction=use_both_prediction
+    self.n_head_prediction=n_head_prediction
+    self.num_heads=num_heads
 
     # Checkpointed experiment state.
     self._byol_state = None
@@ -166,11 +173,13 @@ class ByolExperiment:
         hidden_size=projector_hidden_size,
         output_size=projector_output_size,
         bn_config=bn_config)
+    
     predictor = networks.MLP(
         name='predictor',
         hidden_size=predictor_hidden_size,
-        output_size=projector_output_size,
+        output_size=self.num_heads if self.n_head_prediction else projector_output_size,
         bn_config=bn_config)
+    
     classifier = hk.Linear(
         output_size=self._num_classes, name='classifier')
 
@@ -310,8 +319,8 @@ class ByolExperiment:
         repr_loss = td_forward + td_backward
         
       elif self.update_type in [2, 3]:
-        which_target_view = jax.lax.argmax(jnp.stack([target_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)
-        which_online_view = jax.lax.argmax(jnp.stack([online_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)
+        which_target_view = jnp.argmax(jnp.stack([target_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)
+        which_online_view = jnp.argmax(jnp.stack([online_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)
         
         network_val = online_network_out['prediction']
         target_network_val = target_network_out['prediction']
@@ -352,6 +361,16 @@ class ByolExperiment:
         additional_logs = {'verbose/' + k: v for k, v in additional_logs.items()}
         
         repr_loss = td_forward + td_backward
+    
+    elif self.use_both_prediction or self.n_head_prediction:
+      repr_loss = helpers.regression_loss(
+          online_network_out['prediction_view1'],
+          jax.lax.stop_gradient(target_network_out['prediction_view2']))
+      repr_loss = repr_loss + helpers.regression_loss(
+          online_network_out['prediction_view2'],
+          jax.lax.stop_gradient(target_network_out['prediction_view1']))  
+      
+      additional_logs = {}
     else:
       repr_loss = helpers.regression_loss(
           online_network_out['prediction_view1'],

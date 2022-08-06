@@ -47,6 +47,9 @@ flags.DEFINE_integer('use_imagenette', 1, 'To use Imagenette dataset')
 flags.DEFINE_integer('rl_update', 0, 'Use RL Update')
 flags.DEFINE_integer('num_samples', 20, 'Number of Samples')
 flags.DEFINE_integer('update_type', 0, 'Use RL Update')
+flags.DEFINE_integer('use_both_prediction', 0, 'Use RL Update')
+flags.DEFINE_integer('n_head_prediction', 0, 'Use RL Update')
+flags.DEFINE_integer('num_heads', 1024, 'Use RL Update')
 FLAGS = flags.FLAGS
 
 
@@ -165,7 +168,10 @@ def main(_):
                                     use_imagenette=FLAGS.use_imagenette, 
                                     rl_update=FLAGS.rl_update,
                                     num_samples=FLAGS.num_samples,
-                                    update_type=FLAGS.update_type)
+                                    update_type=FLAGS.update_type,
+                                    use_both_prediction=FLAGS.use_both_prediction,
+                                    n_head_prediction=FLAGS.n_head_prediction,
+                                    num_heads=FLAGS.num_heads)
   elif FLAGS.experiment_mode == 'linear-eval':
     experiment_class = eval_experiment.EvalExperiment
     config = eval_config.get_config(f'{FLAGS.checkpoint_root}/pretrain.pkl',
