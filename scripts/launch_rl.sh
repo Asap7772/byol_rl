@@ -15,7 +15,7 @@ if [ $debug = true ]; then
   wandb_project='test'
   full_run_name='test'
 else
-  wandb_project='byol'
+  wandb_project='byol_fixed'
   prefix='td_run'
   full_run_name=$prefix'_'$index
 fi
@@ -27,7 +27,7 @@ rl_update=1
 num_samples=20
 
 # dynamic hyperparameters
-update_types=(5)
+update_types=(0)
 
 for update_type in ${update_types[@]}; do
     if [ $index -eq '0' ]; then
@@ -41,6 +41,7 @@ for update_type in ${update_types[@]}; do
       --rl_update=$rl_update \
       --num_samples=$num_samples \
       --update_type=$update_type \
+      --wandb_project=$wandb_project \
       "
 
       echo $command

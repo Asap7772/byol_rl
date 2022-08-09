@@ -267,20 +267,19 @@ class ByolExperiment:
     # The stop_gradient is not necessary as we explicitly take the gradient with
     # respect to online parameters only in `optax.apply_updates`. We leave it to
     # indicate that gradients are not backpropagated through the target network.
-    
     if self.rl_update:
-      if self.update_type in [0, 1, 5]:
+      if self.update_type in [0,1]:
         forward_values = []
         backward_values = []
         for i in range(self.num_samples):
           forward_values.append(target_network_out['projection_view' + str(i)])
-          backward_values.append(online_network_out['projection_view' + str(i)])
+          backward_values.append(online_network_out['prediction_view' + str(i)])
 
         forward_val = jnp.max(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
         backward_val = jnp.max(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
         
         network_val = online_network_out['prediction']
-        target_network_val = target_network_out['prediction']
+        target_network_val = target_network_out['projection']
 
         if self.update_type == 0:
           td_forward = (network_val - jax.lax.stop_gradient(forward_val))**2
@@ -316,27 +315,32 @@ class ByolExperiment:
       
         additional_logs = {'verbose/' + k: v for k, v in additional_logs.items()}
         
-        if self.update_type == 5:
+        if self.update_type == 0:
           repr_loss = 2 * td_backward # keep the same order of magnitude as the original loss
         else:
           repr_loss = td_forward + td_backward
-        
-      elif self.update_type in [2, 3]:
-        which_target_view = jnp.argmax(jnp.stack([target_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)
-        which_online_view = jnp.argmax(jnp.stack([online_network_out['projection_view' + str(i)].sum() for i in range(self.num_samples)]), axis=0)
-        
-        network_val = online_network_out['prediction']
-        target_network_val = target_network_out['prediction']
-        
-        if self.update_type == 2:
-          td_forward = (network_val - jax.lax.stop_gradient(target_network_out['projection_view' + str(which_target_view)]))**2
-          td_backward = (online_network_out['projection_view' + str(which_online_view)] - jax.lax.stop_gradient(target_network_val))**2
-        else:
-          td_forward = helpers.regression_loss(network_val, jax.lax.stop_gradient(target_network_out['projection_view' + str(which_target_view)]))
-          td_backward = helpers.regression_loss(online_network_out['projection_view' + str(which_online_view)], jax.lax.stop_gradient(target_network_val))
-        
-        
-        additional_logs = dict(
+    
+    elif self.use_both_prediction or self.n_head_prediction:
+      repr_loss = helpers.regression_loss(
+          online_network_out['prediction_view1'],
+          jax.lax.stop_gradient(target_network_out['prediction_view2']))
+      repr_loss = repr_loss + helpers.regression_loss(
+          online_network_out['prediction_view2'],
+          jax.lax.stop_gradient(target_network_out['prediction_view1']))  
+      
+      additional_logs = {}
+    else:
+      network_val = online_network_out['prediction_view1']
+      forward_val = jax.lax.stop_gradient(target_network_out['projection_view2'])
+      td_forward = helpers.regression_loss(network_val, forward_val)
+      
+      backward_val = online_network_out['prediction_view2']
+      target_network_val = jax.lax.stop_gradient(target_network_out['projection_view1'])
+      td_backward = helpers.regression_loss( backward_val, target_network_val)
+      
+      repr_loss = td_forward + td_backward
+      
+      additional_logs = dict(
           td_forward=jnp.mean(td_forward),
           td_backward=jnp.mean(td_backward),
           
@@ -361,28 +365,6 @@ class ByolExperiment:
           backward_aug_min=jnp.min(backward_val),
         )
       
-        additional_logs = {'verbose/' + k: v for k, v in additional_logs.items()}
-        
-        repr_loss = td_forward + td_backward
-    
-    elif self.use_both_prediction or self.n_head_prediction:
-      repr_loss = helpers.regression_loss(
-          online_network_out['prediction_view1'],
-          jax.lax.stop_gradient(target_network_out['prediction_view2']))
-      repr_loss = repr_loss + helpers.regression_loss(
-          online_network_out['prediction_view2'],
-          jax.lax.stop_gradient(target_network_out['prediction_view1']))  
-      
-      additional_logs = {}
-    else:
-      repr_loss = helpers.regression_loss(
-          online_network_out['prediction_view1'],
-          jax.lax.stop_gradient(target_network_out['projection_view2']))
-      repr_loss = repr_loss + helpers.regression_loss(
-          online_network_out['prediction_view2'],
-          jax.lax.stop_gradient(target_network_out['projection_view1']))
-      
-      additional_logs = {}
     repr_loss = jnp.mean(repr_loss)
 
     # Classification loss (with gradient flows stopped from flowing into the
