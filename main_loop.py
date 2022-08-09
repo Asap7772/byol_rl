@@ -147,7 +147,7 @@ def eval_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
     if step <= last_evaluated_step:
       logging.info('Checkpoint at step %d already evaluated, waiting.', step)
       time.sleep(10)
-      continue
+      continune
     host_id = jax.host_id()
     local_device_count = jax.local_device_count()
     step_device = np.broadcast_to(step, [local_device_count])
@@ -175,7 +175,7 @@ def main(_):
                                     use_both_prediction=FLAGS.use_both_prediction,
                                     n_head_prediction=FLAGS.n_head_prediction,
                                     num_heads=FLAGS.num_heads,
-                                    use_ensemble=FLAGS.use_ensemblem
+                                    use_ensemble=FLAGS.use_ensemble,
                                     norm_embedding=FLAGS.norm_embedding,
                                     apply_norm=FLAGS.apply_norm)
   elif FLAGS.experiment_mode == 'linear-eval':

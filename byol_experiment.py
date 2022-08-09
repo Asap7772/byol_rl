@@ -339,12 +339,8 @@ class ByolExperiment:
         network_val = online_network_out['prediction'] # shape (batch_size, D)
         target_network_val = target_network_out['projection'] # shape (batch_size, D)
 
-        if self.update_type == 0:
-          td_forward = (network_val - jax.lax.stop_gradient(forward_val))**2
-          td_backward = (backward_val - jax.lax.stop_gradient(target_network_val))**2
-        else:
-          td_forward = helpers.regression_loss(network_val, jax.lax.stop_gradient(forward_val))
-          td_backward = helpers.regression_loss(backward_val, jax.lax.stop_gradient(target_network_val))
+        td_forward = helpers.regression_loss(network_val, jax.lax.stop_gradient(forward_val))
+        td_backward = helpers.regression_loss(backward_val, jax.lax.stop_gradient(target_network_val))
         
         additional_logs = dict(
           td_forward=jnp.mean(td_forward),
