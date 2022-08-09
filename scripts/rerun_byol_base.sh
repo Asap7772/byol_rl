@@ -2,7 +2,7 @@ checkpoint_root='/home/anikaitsingh/hdd/byol_checkpoints'
 mkdir -p $checkpoint_root
 rm -rf $checkpoint_root/*
 
-wandb_project='byol_fixed_logging'
+wandb_project='byol_fixed'
 num_epochs=1000
 batch_size=256
 rl_update=0

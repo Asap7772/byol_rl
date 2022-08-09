@@ -50,6 +50,9 @@ flags.DEFINE_integer('update_type', 0, 'Use RL Update')
 flags.DEFINE_integer('use_both_prediction', 0, 'Use RL Update')
 flags.DEFINE_integer('n_head_prediction', 0, 'Use RL Update')
 flags.DEFINE_integer('num_heads', 1024, 'Use RL Update')
+flags.DEFINE_integer('use_ensemble', 0, 'Ensemble')
+flags.DEFINE_integer('norm_embedding', 0, 'Normalize Embedding Only')
+flags.DEFINE_integer('apply_norm', 0, 'Normalize Everything')
 FLAGS = flags.FLAGS
 
 
@@ -171,7 +174,10 @@ def main(_):
                                     update_type=FLAGS.update_type,
                                     use_both_prediction=FLAGS.use_both_prediction,
                                     n_head_prediction=FLAGS.n_head_prediction,
-                                    num_heads=FLAGS.num_heads)
+                                    num_heads=FLAGS.num_heads,
+                                    use_ensemble=FLAGS.use_ensemblem
+                                    norm_embedding=FLAGS.norm_embedding,
+                                    apply_norm=FLAGS.apply_norm)
   elif FLAGS.experiment_mode == 'linear-eval':
     experiment_class = eval_experiment.EvalExperiment
     config = eval_config.get_config(f'{FLAGS.checkpoint_root}/pretrain.pkl',

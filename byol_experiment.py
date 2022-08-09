@@ -19,6 +19,7 @@ Use this experiment to pre-train a self-supervised representation.
 """
 
 import functools
+from inspect import stack
 from turtle import backward
 from typing import Any, Generator, Mapping, NamedTuple, Text, Tuple, Union
 
@@ -29,6 +30,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+
+import copy
 
 from byol.utils import augmentations
 from byol.utils import checkpointing
@@ -74,6 +77,9 @@ class ByolExperiment:
       use_both_prediction=0,
       n_head_prediction=0,
       num_heads=1024,
+      use_ensemble=0,
+      norm_embedding=0,
+      apply_norm=0,
       **kwargs
       ):
     """Constructs the experiment.
@@ -113,6 +119,9 @@ class ByolExperiment:
     self.use_both_prediction=use_both_prediction
     self.n_head_prediction=n_head_prediction
     self.num_heads=num_heads
+    self.use_ensemble=use_ensemble
+    self.norm_embedding=norm_embedding
+    self.apply_norm=apply_norm
 
     # Checkpointed experiment state.
     self._byol_state = None
@@ -179,16 +188,38 @@ class ByolExperiment:
         hidden_size=predictor_hidden_size,
         output_size=self.num_heads if self.n_head_prediction else projector_output_size,
         bn_config=bn_config)
+
+    if self.use_ensemble:
+      net2 = copy.deepcopy(net)
+      projector2 = copy.deepcopy(projector)
+      predictor2 = copy.deepcopy(predictor)
     
-    classifier = hk.Linear(
-        output_size=self._num_classes, name='classifier')
+    classifier = hk.Linear(output_size=self._num_classes, name='classifier')
 
     def apply_once_fn(images: jnp.ndarray, suffix: Text = ''):
       images = dataset.normalize_images(images)
 
       embedding = net(images, is_training=is_training)
+      if self.apply_norm or self.norm_embedding:
+        embedding = embedding / (jnp.linalg.norm(embedding, axis=-1, keepdims=True) + 1e-8)
       proj_out = projector(embedding, is_training)
+      if self.apply_norm:
+        proj_out = proj_out / (jnp.linalg.norm(proj_out, axis=-1, keepdims=True) + 1e-8)
       pred_out = predictor(proj_out, is_training)
+      if self.apply_norm:
+        pred_out = pred_out / (jnp.linalg.norm(pred_out, axis=-1, keepdims=True) + 1e-8)
+        
+      if self.use_ensemble:
+        embedding2 = net(images, is_training=is_training)
+        if self.apply_norm or self.norm_embedding:
+          embedding2 = embedding2 / (jnp.linalg.norm(embedding2, axis=-1, keepdims=True) + 1e-8)
+        proj_out2 = projector2(embedding2, is_training)
+        if self.apply_norm:
+          proj_out2 = proj_out2 / (jnp.linalg.norm(proj_out2, axis=-1, keepdims=True) + 1e-8)
+        pred_out2 = predictor2(proj_out2, is_training)
+        if self.apply_norm:
+          pred_out2 = pred_out2 / (jnp.linalg.norm(pred_out2, axis=-1, keepdims=True) + 1e-8)
+        
 
       # Note the stop_gradient: label information is not leaked into the
       # main network.
@@ -197,6 +228,11 @@ class ByolExperiment:
       outputs['projection' + suffix] = proj_out
       outputs['prediction' + suffix] = pred_out
       outputs['logits' + suffix] = classif_out
+      
+      if self.use_ensemble:
+        outputs['projection2' + suffix] = proj_out2
+        outputs['prediction2' + suffix] = pred_out2
+        
       return outputs
 
     if is_training:
@@ -269,17 +305,39 @@ class ByolExperiment:
     # indicate that gradients are not backpropagated through the target network.
     if self.rl_update:
       if self.update_type in [0,1]:
-        forward_values = []
-        backward_values = []
-        for i in range(self.num_samples):
-          forward_values.append(target_network_out['projection_view' + str(i)])
-          backward_values.append(online_network_out['prediction_view' + str(i)])
+        if self.use_ensemble:
+          forward_values1 = []
+          forward_values2 = []
+          
+          backward_values1 = []
+          backward_values2 = []
+          
+          for i in range(self.num_samples):
+            forward_values1.append(target_network_out['projection_view' + str(i)]) 
+            backward_values1.append(online_network_out['prediction_view' + str(i)])
+            
+            forward_values2.append(target_network_out['projection2_view' + str(i)])
+            backward_values2.append(online_network_out['prediction2_view' + str(i)])
+          
+          forward_values1 = jnp.stack(forward_values1, axis=0)
+          forward_values2 = jnp.stack(forward_values2, axis=0)
+          forward_val = jnp.max(jnp.min(jnp.stack([forward_values1, forward_values2], axis=0), axis=0), axis=0)
+          
+          backward_values1 = jnp.stack(backward_values1, axis=0)
+          backward_values2 = jnp.stack(backward_values2, axis=0)
+          backward_val = jnp.max(jnp.min(jnp.stack([backward_values1, backward_values2], axis=0), axis=0), axis=0)
+        else:
+          forward_values = []
+          backward_values = []
+          for i in range(self.num_samples):
+            forward_values.append(target_network_out['projection_view' + str(i)])
+            backward_values.append(online_network_out['prediction_view' + str(i)])
 
-        forward_val = jnp.max(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
-        backward_val = jnp.max(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
+          forward_val = jnp.max(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
+          backward_val = jnp.max(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
         
-        network_val = online_network_out['prediction']
-        target_network_val = target_network_out['projection']
+        network_val = online_network_out['prediction'] # shape (batch_size, D)
+        target_network_val = target_network_out['projection'] # shape (batch_size, D)
 
         if self.update_type == 0:
           td_forward = (network_val - jax.lax.stop_gradient(forward_val))**2

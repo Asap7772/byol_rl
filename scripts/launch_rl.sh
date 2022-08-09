@@ -16,7 +16,7 @@ if [ $debug = true ]; then
   full_run_name='test'
 else
   wandb_project='byol_fixed'
-  prefix='td_run'
+  prefix='td_run_normalize'
   full_run_name=$prefix'_'$index
 fi
 
