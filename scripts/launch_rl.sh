@@ -16,7 +16,7 @@ if [ $debug = true ]; then
   full_run_name='test'
 else
   wandb_project='byol_fixed'
-  prefix='td_run_normalize'
+  prefix='td_run_addsecondterm'
   full_run_name=$prefix'_'$index
 fi
 
@@ -27,7 +27,7 @@ rl_update=1
 num_samples=20
 
 # dynamic hyperparameters
-update_types=(0)
+update_types=(1 2)
 
 for update_type in ${update_types[@]}; do
     if [ $index -eq '0' ]; then

@@ -304,7 +304,7 @@ class ByolExperiment:
     # respect to online parameters only in `optax.apply_updates`. We leave it to
     # indicate that gradients are not backpropagated through the target network.
     if self.rl_update:
-      if self.update_type in [0,1]:
+      if self.update_type in [0,1,2]:
         if self.use_ensemble:
           forward_values1 = []
           forward_values2 = []
@@ -375,7 +375,10 @@ class ByolExperiment:
         
         if self.update_type == 0:
           repr_loss = 2 * td_backward # keep the same order of magnitude as the original loss
+        elif self.update_type == 1:
+          repr_loss = td_forward + td_backward
         else:
+          td_forward = helpers.regression_loss(online_network_out['prediction_view1'], jax.lax.stop_gradient(target_network_out['projection_view2']))
           repr_loss = td_forward + td_backward
     
     elif self.use_both_prediction or self.n_head_prediction:
