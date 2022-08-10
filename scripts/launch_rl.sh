@@ -26,6 +26,10 @@ batch_size=256
 rl_update=1
 num_samples=20
 
+use_ensemble=0
+norm_embedding=0
+apply_norm=0
+
 # dynamic hyperparameters
 update_types=(1 2)
 
@@ -42,6 +46,7 @@ for update_type in ${update_types[@]}; do
       --num_samples=$num_samples \
       --update_type=$update_type \
       --wandb_project=$wandb_project \
+      --use_ensemble=$use_ensemble
       "
 
       echo $command
