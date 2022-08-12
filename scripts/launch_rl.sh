@@ -15,8 +15,8 @@ if [ $debug = true ]; then
   wandb_project='test'
   full_run_name='test'
 else
-  wandb_project='byol_fixed'
-  prefix='td_run_addsecondterm'
+  wandb_project='byol_basetd'
+  prefix='td_run_random_rewards'
   full_run_name=$prefix'_'$index
 fi
 
@@ -29,7 +29,7 @@ num_samples=20
 use_ensemble=0
 norm_embedding=0
 apply_norm=0
-use_random_rewards=1,
+use_random_rewards=1
 
 # dynamic hyperparameters
 update_types=(1 2)
@@ -57,7 +57,7 @@ for update_type in ${update_types[@]}; do
         --discount=$discount \
         --reward_scale=$reward_scale \
         "
-        
+
         echo $command
         if [ $dry_run = false ]; then
           eval $command

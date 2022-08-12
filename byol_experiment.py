@@ -348,7 +348,7 @@ class ByolExperiment:
         target_network_val = target_network_out['prediction'] # shape (batch_size, D)
 
         key, rng = jax.random.split(rng)
-        random_rewards = jnp.random.normal(key,shape=forward_val.shape) * self.reward_scale
+        random_rewards = jax.random.normal(key,shape=forward_val.shape) * self.reward_scale
         
         td_forward = helpers.regression_loss(network_val, random_rewards + self.discount * jax.lax.stop_gradient(forward_val))
         td_backward = helpers.regression_loss(backward_val, random_rewards + self.discount * jax.lax.stop_gradient(target_network_val))
