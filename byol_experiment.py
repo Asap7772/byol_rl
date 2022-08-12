@@ -80,6 +80,9 @@ class ByolExperiment:
       use_ensemble=0,
       norm_embedding=0,
       apply_norm=0,
+      use_random_rewards=1,
+      discount=0.95,
+      reward_scale=1.0,
       **kwargs
       ):
     """Constructs the experiment.
@@ -122,7 +125,11 @@ class ByolExperiment:
     self.use_ensemble=use_ensemble
     self.norm_embedding=norm_embedding
     self.apply_norm=apply_norm
-
+    
+    self.use_random_rewards=use_random_rewards
+    self.discount=discount
+    self.reward_scale=reward_scale
+    
     # Checkpointed experiment state.
     self._byol_state = None
 
@@ -313,11 +320,11 @@ class ByolExperiment:
           backward_values2 = []
           
           for i in range(self.num_samples):
-            forward_values1.append(target_network_out['projection_view' + str(i)]) 
-            backward_values1.append(online_network_out['prediction_view' + str(i)])
+            forward_values1.append(target_network_out[f'prediction_view{i}']) 
+            backward_values1.append(online_network_out[f'prediction_view{i}'])
             
-            forward_values2.append(target_network_out['projection2_view' + str(i)])
-            backward_values2.append(online_network_out['prediction2_view' + str(i)])
+            forward_values2.append(target_network_out[f'prediction2_view{i}'])
+            backward_values2.append(online_network_out[f'prediction2_view{i}'])
           
           forward_values1 = jnp.stack(forward_values1, axis=0)
           forward_values2 = jnp.stack(forward_values2, axis=0)
@@ -331,21 +338,31 @@ class ByolExperiment:
           forward_values = []
           backward_values = []
           for i in range(self.num_samples):
-            forward_values.append(target_network_out['projection_view' + str(i)])
-            backward_values.append(online_network_out['prediction_view' + str(i)])
+            forward_values.append(target_network_out[f'prediction_view{i}'])
+            backward_values.append(online_network_out[f'prediction_view{i}'])
 
           forward_val = jnp.max(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
           backward_val = jnp.max(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
         
         network_val = online_network_out['prediction'] # shape (batch_size, D)
-        target_network_val = target_network_out['projection'] # shape (batch_size, D)
+        target_network_val = target_network_out['prediction'] # shape (batch_size, D)
 
-        td_forward = helpers.regression_loss(network_val, jax.lax.stop_gradient(forward_val))
-        td_backward = helpers.regression_loss(backward_val, jax.lax.stop_gradient(target_network_val))
+        key, rng = jax.random.split(rng)
+        random_rewards = jnp.random.normal(key,shape=forward_val.shape) * self.reward_scale
+        
+        td_forward = helpers.regression_loss(network_val, random_rewards + self.discount * jax.lax.stop_gradient(forward_val))
+        td_backward = helpers.regression_loss(backward_val, random_rewards + self.discount * jax.lax.stop_gradient(target_network_val))
         
         additional_logs = dict(
-          td_forward=jnp.mean(td_forward),
-          td_backward=jnp.mean(td_backward),
+          td_forward_mean=jnp.mean(td_forward),
+          td_forward_std=jnp.std(td_forward),
+          td_forward_max=jnp.max(td_forward),
+          td_forward_min=jnp.min(td_forward),
+          
+          td_backward_mean=jnp.mean(td_backward),
+          td_backward_std=jnp.std(td_backward),
+          td_backward_max=jnp.max(td_backward),
+          td_backward_min=jnp.min(td_backward),
           
           val_mean=jnp.mean(network_val),
           val_std=jnp.std(network_val),
@@ -377,7 +394,7 @@ class ByolExperiment:
         else:
           td_forward = helpers.regression_loss(online_network_out['prediction_view1'], jax.lax.stop_gradient(target_network_out['projection_view2']))
           repr_loss = td_forward + td_backward
-    
+      
     elif self.use_both_prediction or self.n_head_prediction:
       repr_loss = helpers.regression_loss(
           online_network_out['prediction_view1'],

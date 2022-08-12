@@ -29,30 +29,41 @@ num_samples=20
 use_ensemble=0
 norm_embedding=0
 apply_norm=0
+use_random_rewards=1,
 
 # dynamic hyperparameters
 update_types=(1 2)
+discounts=(0.99 0.9)
+reward_scales=(1.0 0.1)
 
 for update_type in ${update_types[@]}; do
-    if [ $index -eq '0' ]; then
-      command="python -m byol.main_loop \
-      --experiment_mode='pretrain' \
-      --worker_mode='train' \
-      --checkpoint_root=$checkpoint_root \
-      --batch_size=$batch_size \
-      --pretrain_epochs=$num_epochs \
-      --run_name=$full_run_name \
-      --rl_update=$rl_update \
-      --num_samples=$num_samples \
-      --update_type=$update_type \
-      --wandb_project=$wandb_project \
-      --use_ensemble=$use_ensemble
-      "
-
-      echo $command
-      if [ $dry_run = false ]; then
-        eval $command
+  for discount in ${discounts[@]}; do
+    for reward_scale in ${reward_scales[@]}; do
+      if [ $index -eq '0' ]; then
+        
+        command="python -m byol.main_loop \
+        --experiment_mode='pretrain' \
+        --worker_mode='train' \
+        --checkpoint_root=$checkpoint_root \
+        --batch_size=$batch_size \
+        --pretrain_epochs=$num_epochs \
+        --run_name=$full_run_name \
+        --rl_update=$rl_update \
+        --num_samples=$num_samples \
+        --update_type=$update_type \
+        --wandb_project=$wandb_project \
+        --use_ensemble=$use_ensemble \
+        --use_random_rewards=$use_random_rewards \
+        --discount=$discount \
+        --reward_scale=$reward_scale \
+        "
+        
+        echo $command
+        if [ $dry_run = false ]; then
+          eval $command
+        fi
       fi
-    fi
-    index=$((index-1))
+      index=$((index-1))
+    done
+  done
 done

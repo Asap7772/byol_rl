@@ -53,6 +53,9 @@ flags.DEFINE_integer('num_heads', 1024, 'Use RL Update')
 flags.DEFINE_integer('use_ensemble', 0, 'Ensemble')
 flags.DEFINE_integer('norm_embedding', 0, 'Normalize Embedding Only')
 flags.DEFINE_integer('apply_norm', 0, 'Normalize Everything')
+flags.DEFINE_integer('use_random_rewards', 1, 'Normalize Everything')
+flags.DEFINE_float('discount', 0.95, 'Normalize Everything')
+flags.DEFINE_float('reward_scale', 1, 'Normalize Everything')
 FLAGS = flags.FLAGS
 
 
@@ -147,7 +150,7 @@ def eval_loop(experiment_class: Experiment, config: Mapping[Text, Any]):
     if step <= last_evaluated_step:
       logging.info('Checkpoint at step %d already evaluated, waiting.', step)
       time.sleep(10)
-      continune
+      continue
     host_id = jax.host_id()
     local_device_count = jax.local_device_count()
     step_device = np.broadcast_to(step, [local_device_count])
@@ -177,7 +180,10 @@ def main(_):
                                     num_heads=FLAGS.num_heads,
                                     use_ensemble=FLAGS.use_ensemble,
                                     norm_embedding=FLAGS.norm_embedding,
-                                    apply_norm=FLAGS.apply_norm)
+                                    apply_norm=FLAGS.apply_norm,
+                                    use_random_rewards=FLAGS.use_random_rewards,
+                                    discount=FLAGS.discount,
+                                    reward_scale=FLAGS.reward_scale)
   elif FLAGS.experiment_mode == 'linear-eval':
     experiment_class = eval_experiment.EvalExperiment
     config = eval_config.get_config(f'{FLAGS.checkpoint_root}/pretrain.pkl',
