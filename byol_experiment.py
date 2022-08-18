@@ -83,6 +83,8 @@ class ByolExperiment:
       use_random_rewards=1,
       discount=0.95,
       reward_scale=1.0,
+      random_reward_type='gaussian',
+      static_reward=0,
       **kwargs
       ):
     """Constructs the experiment.
@@ -127,6 +129,9 @@ class ByolExperiment:
     self.apply_norm=apply_norm
     
     self.use_random_rewards=use_random_rewards
+    self.random_reward_type=random_reward_type
+    self.static_reward=static_reward
+    self.static_key=jax.random.PRNGKey(random_seed)
     self.discount=discount
     self.reward_scale=reward_scale
     
@@ -347,8 +352,17 @@ class ByolExperiment:
         network_val = online_network_out['prediction'] # shape (batch_size, D)
         target_network_val = target_network_out['prediction'] # shape (batch_size, D)
 
-        key, rng = jax.random.split(rng)
-        random_rewards = jax.random.normal(key,shape=forward_val.shape) * self.reward_scale
+        if self.static_reward:
+          key = self.static_key
+        else:
+          key, rng = jax.random.split(rng)
+
+        if self.random_reward_type == 'gaussian':
+          random_rewards = jax.random.normal(key,shape=forward_val.shape) * self.reward_scale
+        elif self.random_reward_type == 'uniform':
+          random_rewards = jax.random.uniform(key,shape=forward_val.shape) * self.reward_scale
+        elif self.random_reward_type == 'bernoulli':
+          random_rewards = jax.random.bernoulli(key, p=0.5, shape=forward_val.shape) * self.reward_scale
         
         td_forward = helpers.regression_loss(network_val, random_rewards + self.discount * jax.lax.stop_gradient(forward_val))
         td_backward = helpers.regression_loss(backward_val, random_rewards + self.discount * jax.lax.stop_gradient(target_network_val))

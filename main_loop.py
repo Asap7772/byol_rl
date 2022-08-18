@@ -56,6 +56,9 @@ flags.DEFINE_integer('apply_norm', 0, 'Normalize Everything')
 flags.DEFINE_integer('use_random_rewards', 1, 'Normalize Everything')
 flags.DEFINE_float('discount', 0.95, 'Normalize Everything')
 flags.DEFINE_float('reward_scale', 1, 'Normalize Everything')
+flags.DEFINE_string('random_reward_type', 'gaussian', 'Normalize Everything')
+flags.DEFINE_integer('static_reward', 0, 'Normalize Everything')
+
 FLAGS = flags.FLAGS
 
 
@@ -183,7 +186,9 @@ def main(_):
                                     apply_norm=FLAGS.apply_norm,
                                     use_random_rewards=FLAGS.use_random_rewards,
                                     discount=FLAGS.discount,
-                                    reward_scale=FLAGS.reward_scale)
+                                    reward_scale=FLAGS.reward_scale,
+                                    random_reward_type=FLAGS.random_reward_type,
+                                    static_reward=FLAGS.static_reward)
   elif FLAGS.experiment_mode == 'linear-eval':
     experiment_class = eval_experiment.EvalExperiment
     config = eval_config.get_config(f'{FLAGS.checkpoint_root}/pretrain.pkl',
