@@ -87,6 +87,8 @@ def load(split: Split,
          transpose: bool = False,
          allow_caching: bool = False,
          rl_pretrain:bool=False,
+         random_reward_type='gaussian',
+         num_random_rewards=1024,
          num_samples=20) -> Generator[Batch, None, None]:
   """Loads the given split of the dataset."""
   start, end = _shard(split, jax.host_id(), jax.host_count())
@@ -124,15 +126,25 @@ def load(split: Split,
   ds = ds.with_options(options)
 
   def preprocess_pretrain(example):
+    hash_val = hash(example['image'].ref()) # need to check if valid approach
+    key = jax.random.PRNGKey(hash_val)
+    
+    if random_reward_type == 'gaussian':
+      random_rewards = jax.random.normal(key, shape=(num_random_rewards,)) 
+    elif random_reward_type == 'uniform':
+      random_rewards = jax.random.uniform(key, shape=(num_random_rewards,))
+    elif random_reward_type == 'bernoulli':
+      random_rewards = jax.random.bernoulli(key, p=0.5, shape=(num_random_rewards,)) 
+    
     if rl_pretrain:
       views= {'view'+str(i):_preprocess_image(example['image'], mode=preprocess_mode) for i in range(num_samples)}
       label = tf.cast(example['label'], tf.int32)
-      return {'images': _preprocess_image(example['image'], mode=PreprocessMode.NO_CROP), 'labels': label, **views}
+      return {'images': _preprocess_image(example['image'], mode=PreprocessMode.NO_CROP), 'labels': label, **views, 'hash': hash_val, 'reward': random_rewards}
     else:
       view1 = _preprocess_image(example['image'], mode=preprocess_mode)
       view2 = _preprocess_image(example['image'], mode=preprocess_mode)
       label = tf.cast(example['label'], tf.int32)
-      return {'view1': view1, 'view2': view2, 'labels': label}
+      return {'view1': view1, 'view2': view2, 'labels': label, 'hash': hash_val, 'reward': random_rewards}
 
   def preprocess_linear_train(example):
     image = _preprocess_image(example['image'], mode=preprocess_mode)

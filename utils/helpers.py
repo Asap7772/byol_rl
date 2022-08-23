@@ -14,6 +14,7 @@
 # limitations under the License.
 """Utility functions."""
 
+from tkinter import Y
 from typing import Optional, Text
 from absl import logging
 import jax
@@ -110,6 +111,10 @@ def regression_loss(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
   """Byol's regression loss. This is a simple cosine similarity."""
   normed_x, normed_y = l2_normalize(x, axis=-1), l2_normalize(y, axis=-1)
   return jnp.sum((normed_x - normed_y)**2, axis=-1)
+
+def mse_loss(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+  """This is a simple MSE Loss."""
+  return jnp.sum((x - y)**2, axis=-1)
 
 
 def bcast_local_devices(value):

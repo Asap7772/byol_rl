@@ -15,7 +15,7 @@ if [ $debug = true ]; then
   wandb_project='test'
   full_run_name='test'
 else
-  wandb_project='byol_basetd_staticrew'
+  wandb_project='byol_rerun_staticrew'
   prefix='td_run_random_rewards'
   full_run_name=$prefix'_'$index
 fi
@@ -36,7 +36,7 @@ num_heads=1024
 update_types=(0 1)
 discounts=(0.99 0.9)
 reward_scales=(1.0)
-random_reward_types=('bernoulli' 'uniform')
+random_reward_types=('bernoulli' 'gaussian')
 static_rewards=(1 0)
 
 for update_type in ${update_types[@]}; do
@@ -45,6 +45,13 @@ for update_type in ${update_types[@]}; do
       for random_reward_type in ${random_reward_types[@]}; do
         for static_reward in ${static_rewards[@]}; do
           if [ $index -eq '0' ]; then
+
+            echo "Update Type $update_type"
+            echo "Discount $discount"
+            echo "Reward Scale $reward_scale"
+            echo "Random Reward Type $random_reward_type"
+            echo "Static Reward: $static_reward"
+
             command="python -m byol.main_loop \
             --experiment_mode='pretrain' \
             --worker_mode='train' \

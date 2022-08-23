@@ -207,7 +207,7 @@ class ByolExperiment:
       predictor2 = copy.deepcopy(predictor)
     
     classifier = hk.Linear(output_size=self._num_classes, name='classifier')
-
+    
     def apply_once_fn(images: jnp.ndarray, suffix: Text = ''):
       images = dataset.normalize_images(images)
 
@@ -232,7 +232,6 @@ class ByolExperiment:
         if self.apply_norm:
           pred_out2 = pred_out2 / (jnp.linalg.norm(pred_out2, axis=-1, keepdims=True) + 1e-8)
         
-
       # Note the stop_gradient: label information is not leaked into the
       # main network.
       classif_out = classifier(jax.lax.stop_gradient(embedding))
@@ -294,6 +293,7 @@ class ByolExperiment:
       BYOL's loss, a mapping containing the online and target networks updated
       states after processing inputs, and various logs.
     """
+    rewards = inputs['reward']
     if self._should_transpose_images():
       inputs = dataset.transpose_images(inputs)
     inputs = augmentations.postprocess(inputs, rng, rl_update=self.rl_update, num_samples=self.num_samples)
@@ -309,7 +309,7 @@ class ByolExperiment:
         state=target_state,
         inputs=inputs,
         is_training=True)
-
+    
     # Representation loss
 
     # The stop_gradient is not necessary as we explicitly take the gradient with
@@ -351,21 +351,21 @@ class ByolExperiment:
         
         network_val = online_network_out['prediction'] # shape (batch_size, D)
         target_network_val = target_network_out['prediction'] # shape (batch_size, D)
-
+        
         if self.static_reward:
-          key = self.static_key
+          random_rewards = (rewards * self.reward_scale).reshape(forward_val.shape)
         else:
           key, rng = jax.random.split(rng)
 
-        if self.random_reward_type == 'gaussian':
-          random_rewards = jax.random.normal(key,shape=forward_val.shape) * self.reward_scale
-        elif self.random_reward_type == 'uniform':
-          random_rewards = jax.random.uniform(key,shape=forward_val.shape) * self.reward_scale
-        elif self.random_reward_type == 'bernoulli':
-          random_rewards = jax.random.bernoulli(key, p=0.5, shape=forward_val.shape) * self.reward_scale
+          if self.random_reward_type == 'gaussian':
+            random_rewards = jax.random.normal(key,shape=forward_val.shape) * self.reward_scale
+          elif self.random_reward_type == 'uniform':
+            random_rewards = jax.random.uniform(key,shape=forward_val.shape) * self.reward_scale
+          elif self.random_reward_type == 'bernoulli':
+            random_rewards = jax.random.bernoulli(key, p=0.5, shape=forward_val.shape) * self.reward_scale
         
-        td_forward = helpers.regression_loss(network_val, random_rewards + self.discount * jax.lax.stop_gradient(forward_val))
-        td_backward = helpers.regression_loss(backward_val, random_rewards + self.discount * jax.lax.stop_gradient(target_network_val))
+        td_forward = helpers.mse_loss(network_val, random_rewards + self.discount * jax.lax.stop_gradient(forward_val))
+        td_backward = helpers.mse_loss(backward_val, random_rewards + self.discount * jax.lax.stop_gradient(target_network_val))
         
         additional_logs = dict(
           td_forward_mean=jnp.mean(td_forward),
@@ -406,8 +406,7 @@ class ByolExperiment:
         elif self.update_type == 1:
           repr_loss = td_forward + td_backward
         else:
-          td_forward = helpers.regression_loss(online_network_out['prediction_view1'], jax.lax.stop_gradient(target_network_out['projection_view2']))
-          repr_loss = td_forward + td_backward
+          raise NotImplementedError('Update Type not Valid')
       
     elif self.use_both_prediction or self.n_head_prediction:
       repr_loss = helpers.regression_loss(
@@ -452,6 +451,11 @@ class ByolExperiment:
           backward_aug_std=jnp.std(backward_val),
           backward_aug_max=jnp.max(backward_val),
           backward_aug_min=jnp.min(backward_val),
+          
+          random_rewards_mean=jnp.mean(random_rewards),
+          random_rewards_std=jnp.std(random_rewards),
+          random_rewards_max=jnp.max(random_rewards),
+          random_rewards_min=jnp.min(random_rewards),
         )
       
     repr_loss = jnp.mean(repr_loss)
@@ -669,7 +673,10 @@ class ByolExperiment:
         transpose=self._should_transpose_images(),
         batch_dims=[jax.local_device_count(), per_device_batch_size],
         rl_pretrain=self.rl_update,
-        num_samples=self.num_samples)
+        num_samples=self.num_samples,
+        random_reward_type=self.random_reward_type,
+        num_random_rewards=self.num_heads if self.n_head_prediction else 256, # 256 is the default value
+        )
 
   def _eval_batch(
       self,
