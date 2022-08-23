@@ -85,6 +85,7 @@ class ByolExperiment:
       reward_scale=1.0,
       random_reward_type='gaussian',
       static_reward=0,
+      use_mean=0,
       **kwargs
       ):
     """Constructs the experiment.
@@ -120,6 +121,7 @@ class ByolExperiment:
     self.rl_update = rl_update
     self.update_type = update_type
     self.num_samples = num_samples
+    self.use_mean = use_mean
     
     self.use_both_prediction=use_both_prediction
     self.n_head_prediction=n_head_prediction
@@ -315,6 +317,7 @@ class ByolExperiment:
     # The stop_gradient is not necessary as we explicitly take the gradient with
     # respect to online parameters only in `optax.apply_updates`. We leave it to
     # indicate that gradients are not backpropagated through the target network.
+    coalesc_func = jnp.mean if self.use_mean else jnp.max
     if self.rl_update:
       if self.update_type in [0,1,2]:
         if self.use_ensemble:
@@ -333,11 +336,11 @@ class ByolExperiment:
           
           forward_values1 = jnp.stack(forward_values1, axis=0)
           forward_values2 = jnp.stack(forward_values2, axis=0)
-          forward_val = jnp.max(jnp.min(jnp.stack([forward_values1, forward_values2], axis=0), axis=0), axis=0)
+          forward_val = coalesc_func(jnp.min(jnp.stack([forward_values1, forward_values2], axis=0), axis=0), axis=0)
           
           backward_values1 = jnp.stack(backward_values1, axis=0)
           backward_values2 = jnp.stack(backward_values2, axis=0)
-          backward_val = jnp.max(jnp.min(jnp.stack([backward_values1, backward_values2], axis=0), axis=0), axis=0)
+          backward_val = coalesc_func(jnp.min(jnp.stack([backward_values1, backward_values2], axis=0), axis=0), axis=0)
         
         else:
           forward_values = []
@@ -346,8 +349,8 @@ class ByolExperiment:
             forward_values.append(target_network_out[f'prediction_view{i}'])
             backward_values.append(online_network_out[f'prediction_view{i}'])
 
-          forward_val = jnp.max(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
-          backward_val = jnp.max(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
+          forward_val = coalesc_func(jnp.stack(forward_values), axis=0) # shape (batch_size, D)
+          backward_val = coalesc_func(jnp.stack(backward_values), axis=0) # shape (batch_size, D)
         
         network_val = online_network_out['prediction'] # shape (batch_size, D)
         target_network_val = target_network_out['prediction'] # shape (batch_size, D)

@@ -15,7 +15,7 @@ if [ $debug = true ]; then
   wandb_project='test'
   full_run_name='test'
 else
-  wandb_project='byol_rerun_staticrew'
+  wandb_project='byol_mean_staticrew'
   prefix='td_run_random_rewards'
   full_run_name=$prefix'_'$index
 fi
@@ -31,6 +31,7 @@ apply_norm=0
 use_random_rewards=1
 n_head_prediction=1
 num_heads=1024
+use_mean=1
 
 # dynamic hyperparameters
 update_types=(0 1)
@@ -71,6 +72,7 @@ for update_type in ${update_types[@]}; do
             --static_reward=$static_reward \
             --n_head_prediction $n_head_prediction \
             --num_heads $num_heads \
+            --use_mean $use_mean \
             "
 
             echo $command

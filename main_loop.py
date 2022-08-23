@@ -47,17 +47,18 @@ flags.DEFINE_integer('use_imagenette', 1, 'To use Imagenette dataset')
 flags.DEFINE_integer('rl_update', 0, 'Use RL Update')
 flags.DEFINE_integer('num_samples', 20, 'Number of Samples')
 flags.DEFINE_integer('update_type', 0, 'Use RL Update')
-flags.DEFINE_integer('use_both_prediction', 0, 'Use RL Update')
-flags.DEFINE_integer('n_head_prediction', 0, 'Use RL Update')
-flags.DEFINE_integer('num_heads', 1024, 'Use RL Update')
+flags.DEFINE_integer('use_both_prediction', 0, 'Use both prediction')
+flags.DEFINE_integer('n_head_prediction', 0, 'Number of heads for prediction')
+flags.DEFINE_integer('num_heads', 1024, 'Number of heads')
 flags.DEFINE_integer('use_ensemble', 0, 'Ensemble')
-flags.DEFINE_integer('norm_embedding', 0, 'Normalize Embedding Only')
-flags.DEFINE_integer('apply_norm', 0, 'Normalize Everything')
-flags.DEFINE_integer('use_random_rewards', 1, 'Normalize Everything')
-flags.DEFINE_float('discount', 0.95, 'Normalize Everything')
-flags.DEFINE_float('reward_scale', 1, 'Normalize Everything')
-flags.DEFINE_string('random_reward_type', 'gaussian', 'Normalize Everything')
-flags.DEFINE_integer('static_reward', 0, 'Normalize Everything')
+flags.DEFINE_integer('norm_embedding', 0, 'Norm Embedding')
+flags.DEFINE_integer('apply_norm', 0, 'Apply Norm')
+flags.DEFINE_integer('use_random_rewards', 1, 'Use Random Rewards')
+flags.DEFINE_float('discount', 0.95, 'Discount factor')
+flags.DEFINE_float('reward_scale', 1, 'Reward Scale')
+flags.DEFINE_string('random_reward_type', 'gaussian', 'Random Reward Type')
+flags.DEFINE_integer('static_reward', 0, 'Static Reward')
+flags.DEFINE_integer('use_mean', 0, 'Using Mean')
 
 FLAGS = flags.FLAGS
 
@@ -188,7 +189,9 @@ def main(_):
                                     discount=FLAGS.discount,
                                     reward_scale=FLAGS.reward_scale,
                                     random_reward_type=FLAGS.random_reward_type,
-                                    static_reward=FLAGS.static_reward)
+                                    static_reward=FLAGS.static_reward,
+                                    use_mean=FLAGS.use_mean)
+    
   elif FLAGS.experiment_mode == 'linear-eval':
     experiment_class = eval_experiment.EvalExperiment
     config = eval_config.get_config(f'{FLAGS.checkpoint_root}/pretrain.pkl',
